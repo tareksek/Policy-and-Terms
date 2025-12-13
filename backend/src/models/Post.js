@@ -1,7 +1,8 @@
+
 const mongoose = require('mongoose');
 
 const postSchema = new mongoose.Schema({
-  user: {
+  author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -9,17 +10,53 @@ const postSchema = new mongoose.Schema({
   content: {
     type: String,
     required: true,
-    maxlength: 5000
+    maxlength: [5000, 'Post cannot exceed 5000 characters']
   },
-  images: [{
-    type: String
+  media: [{
+    type: {
+      type: String,
+      enum: ['image', 'video', 'document'],
+      required: true
+    },
+    url: String,
+    thumbnail: String,
+    filename: String,
+    size: Number,
+    dimensions: {
+      width: Number,
+      height: Number
+    }
   }],
-  videos: [{
-    type: String
-  }],
-  likes: [{
+  tags: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  }],
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      default: [0, 0]
+    },
+    name: String
+  },
+  likes: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    reaction: {
+      type: String,
+      enum: ['like', 'love', 'haha', 'wow', 'sad', 'angry'],
+      default: 'like'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
   }],
   comments: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -35,32 +72,55 @@ const postSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
-  hashtags: [{
+  privacy: {
     type: String,
-    lowercase: true
-  }],
-  mentions: [{
+    enum: ['public', 'friends', 'private', 'custom'],
+    default: 'public'
+  },
+  customPrivacy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
-  isPublic: {
-    type: Boolean,
-    default: true
+  group: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Group'
   },
-  allowComments: {
+  isStory: {
     type: Boolean,
-    default: true
+    default: false
+  },
+  storyDuration: {
+    type: Number,
+    default: 24
+  },
+  storyViews: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    viewedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  pinned: {
+    type: Boolean,
+    default: false
   },
   edited: {
     type: Boolean,
     default: false
   },
-  lastEdited: Date
+  editHistory: [{
+    content: String,
+    editedAt: Date
+  }]
 }, {
   timestamps: true
 });
 
-postSchema.index({ user: 1, createdAt: -1 });
-postSchema.index({ hashtags: 1 });
+postSchema.index({ location: '2dsphere' });
+postSchema.index({ author: 1, createdAt: -1 });
+postSchema.index({ isStory: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Post', postSchema);

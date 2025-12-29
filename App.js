@@ -1,63 +1,81 @@
+const express = require('express');
+const path = require('path');
+const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
+const morgan = require('morgan');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+const app = express();
+const PORT = process.env.FRONTEND_PORT || 3000;
+const isProduction = process.env.NODE_ENV === 'production';
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
 
-// المكونات
-import Register from './pages/Register';
-import Login from './pages/Login';
-import Profile from './pages/Profile';
-import Search from './pages/Search';
-import Layout from './components/Layout';
-
-// إنشاء ثيم مخصص
-const theme = createTheme({
-    palette: {
-        primary: {
-            main: '#1976d2',
-        },
-        secondary: {
-            main: '#dc004e',
-        },
-    },
-});
-
-// مكون حماية المسارات
-const PrivateRoute = ({ children }) => {
-    const { user, loading } = useAuth();
-    
-    if (loading) {
-        return <div>Loading...</div>;
+// Middleware
+app.use(helmet({
+  contentSecurityPolicy: isProduction ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", BACKEND_URL]
     }
-    
-    return user ? children : <Navigate to="/login" />;
-};
+  } : false
+}));
+app.use(cors());
+app.use(compression());
+app.use(morgan(isProduction ? 'combined' : 'dev'));
+app.use(express.json());
 
-function App() {
-    return (
-        <ThemeProvider theme={theme}>
-            <CssBaseline />
-            <AuthProvider>
-                <Router>
-                    <Routes>
-                        <Route path="/register" element={<Register />} />
-                        <Route path="/login" element={<Login />} />
-                        
-                        <Route path="/" element={
-                            <PrivateRoute>
-                                <Layout />
-                            </PrivateRoute>
-                        }>
-                            <Route path="profile" element={<Profile />} />
-                            <Route path="search" element={<Search />} />
-                        </Route>
-                    </Routes>
-                </Router>
-            </AuthProvider>
-        </ThemeProvider>
-    );
+// Proxy API requests to backend in development
+if (!isProduction) {
+  app.use('/api', createProxyMiddleware({
+    target: BACKEND_URL,
+    changeOrigin: true,
+    pathRewrite: { '^/api': '' },
+    logLevel: 'debug'
+  }));
 }
 
-export default App;
+// Serve static files from React build in production
+if (isProduction) {
+  app.use(express.static(path.join(__dirname, 'build')));
+}
+
+// API Routes for frontend server
+app.get('/api/frontend/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'frontend-server',
+    frontendUrl: `http://localhost:${PORT}`,
+    backendUrl: BACKEND_URL,
+    timestamp: new Date().toISOString(),
+    mode: isProduction ? 'production' : 'development'
+  });
+});
+
+// Serve React app for all routes in production
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  });
+}
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`
+  🚀 FRONTEND SERVER IS RUNNING
+  ==============================
+  📁 Local:    http://localhost:${PORT}
+  🔗 Backend:  ${BACKEND_URL}
+  ⚙️  Mode:     ${isProduction ? 'Production' : 'Development'}
+  ⏰ Started:  ${new Date().toLocaleString()}
+  
+  📊 Endpoints:
+  - Frontend: http://localhost:${PORT}
+  - Health:   http://localhost:${PORT}/api/frontend/health
+  - Backend:  ${BACKEND_URL}
+  `);
+});

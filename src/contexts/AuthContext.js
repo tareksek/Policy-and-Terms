@@ -6,110 +6,138 @@ const AuthContext = createContext({});
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [backendStatus, setBackendStatus] = useState({ connected: false });
 
-    useEffect(() => {
-        const initAuth = async () => {
-            const token = localStorage.getItem('token');
-            if (token) {
-                try {
-                    const response = await authService.verifyToken();
-                    setUser(response.data.user);
-                } catch (error) {
-                    localStorage.removeItem('token');
-                }
-            }
-            setLoading(false);
-        };
-        initAuth();
-    }, []);
+  useEffect(() => {
+    checkBackendConnection();
+    loadUser();
+  }, []);
 
-    const register = async (userData) => {
-        try {
-            setError(null);
-            const response = await authService.register(userData);
-            const { token, user } = response.data;
-            
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
-            setUser(user);
-            
-            return { success: true };
-        } catch (error) {
-            setError(error.response?.data?.message || 'Registration failed');
-            return { success: false, error: error.response?.data?.message };
-        }
-    };
+  const checkBackendConnection = async () => {
+    try {
+      const response = await authService.verifyToken().catch(() => null);
+      setBackendStatus({
+        connected: true,
+        message: 'Backend connected successfully'
+      });
+    } catch (error) {
+      setBackendStatus({
+        connected: false,
+        message: 'Cannot connect to backend server'
+      });
+    }
+  };
 
-    const login = async (emailOrUsername, password) => {
-        try {
-            setError(null);
-            const response = await authService.login({ emailOrUsername, password });
-            const { token, user } = response.data;
-            
-            localStorage.setItem('token', token);
-            localStorage.setItem('user', JSON.stringify(user));
-            setUser(user);
-            
-            return { success: true };
-        } catch (error) {
-            setError(error.response?.data?.message || 'Login failed');
-            return { success: false, error: error.response?.data?.message };
-        }
-    };
+  const loadUser = async () => {
+    const token = localStorage.getItem('token');
+    const savedUser = localStorage.getItem('user');
+    
+    if (token && savedUser) {
+      try {
+        const response = await authService.verifyToken();
+        setUser(response.data.user);
+      } catch (error) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    }
+    setLoading(false);
+  };
 
-    const logout = async () => {
-        try {
-            await authService.logout();
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            setUser(null);
-        }
-    };
+  const register = async (userData) => {
+    try {
+      const response = await authService.register(userData);
+      const { token, user } = response.data;
+      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setUser(user);
+      
+      return { success: true, data: user };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Registration failed'
+      };
+    }
+  };
 
-    const updateProfile = async (userData) => {
-        try {
-            const response = await userService.updateProfile(userData);
-            const updatedUser = response.data.user;
-            
-            setUser(updatedUser);
-            localStorage.setItem('user', JSON.stringify(updatedUser));
-            
-            return { success: true, user: updatedUser };
-        } catch (error) {
-            return { success: false, error: error.response?.data?.message };
-        }
-    };
+  const login = async (emailOrUsername, password) => {
+    try {
+      const response = await authService.login({ emailOrUsername, password });
+      const { token, user } = response.data;
+      
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      setUser(user);
+      
+      return { success: true, data: user };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Login failed'
+      };
+    }
+  };
 
-    const deleteAccount = async () => {
-        try {
-            await userService.deleteAccount();
-            logout();
-            return { success: true };
-        } catch (error) {
-            return { success: false, error: error.response?.data?.message };
-        }
-    };
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      setUser(null);
+    }
+  };
 
-    const value = {
-        user,
-        loading,
-        error,
-        register,
-        login,
-        logout,
-        updateProfile,
-        deleteAccount
-    };
+  const updateProfile = async (userData) => {
+    try {
+      const response = await userService.updateProfile(userData);
+      const updatedUser = response.data.user;
+      
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      return { success: true, data: updatedUser };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Update failed'
+      };
+    }
+  };
 
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    );
+  const deleteAccount = async () => {
+    try {
+      await userService.deleteAccount();
+      logout();
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Delete failed'
+      };
+    }
+  };
+
+  const value = {
+    user,
+    loading,
+    backendStatus,
+    register,
+    login,
+    logout,
+    updateProfile,
+    deleteAccount
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
